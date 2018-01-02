@@ -1,10 +1,11 @@
 package app
 
+import app.util.CommitCountUtil
 import org.eclipse.egit.github.core.Repository
 import org.eclipse.egit.github.core.RepositoryCommit
 import org.eclipse.egit.github.core.User
 import java.io.Serializable
-import java.util.*
+import java.time.Instant
 import kotlin.streams.toList
 
 object UserCtrl {
@@ -16,7 +17,7 @@ object UserCtrl {
             val repoCommits = repos.parallelStream().map { it to commitsForRepo(it).filter { it.author?.login.equals(username, ignoreCase = true) } }.toList().toMap()
             val langRepoGrouping = repos.groupingBy { (it.language ?: "Unknown") }
 
-            val quarterCommitCount = repoCommits.flatMap { it.value }.groupingBy { getYearAndQuarter(it) }.fold(0) { acc, _ -> acc + 1 }.toSortedMap()
+            val quarterCommitCount = CommitCountUtil.getCommitsForQuarters(user, repoCommits)
             val langRepoCount = langRepoGrouping.eachCount().toList().sortedBy { (_, v) -> -v }.toMap()
             val langStarCount = langRepoGrouping.fold(0) { acc, repo -> acc + repo.watchers }.toList().sortedBy { (_, v) -> -v }.toMap()
             val langCommitCount = langRepoGrouping.fold(0) { acc, repo -> acc + repoCommits[repo]!!.size }.toList().sortedBy { (_, v) -> -v }.toMap()
@@ -38,7 +39,7 @@ object UserCtrl {
                     repoStarCountDescriptions
             ))
         }
-        return Cache.getUserProfile(username.toLowerCase())!!
+        return Cache.getUserProfile(username)!!
     }
 
     fun hasStarredRepo(username: String): Boolean {
@@ -46,7 +47,7 @@ object UserCtrl {
             return true
         }
         if (GhService.remainingRequests == 0) {
-            return false;
+            return false
         }
         return try {
             GhService.watchers.pageWatched(username, 1, 100).first().map { it.name }.contains("github-profile-summary")
@@ -59,11 +60,6 @@ object UserCtrl {
         GhService.commits.getCommits(repo)
     } catch (e: Exception) {
         listOf()
-    }
-
-    private fun getYearAndQuarter(it: RepositoryCommit): String {
-        val date = it.commit.committer.date
-        return "${(1900 + date.year)}-Q${date.month / 3 + 1}"
     }
 
 }
@@ -79,5 +75,5 @@ data class UserProfile(
         val repoCommitCountDescriptions: Map<String, String?>,
         val repoStarCountDescriptions: Map<String, String?>
 ) : Serializable {
-    val timeStamp = Date().time
+    val timeStamp = Instant.now().toEpochMilli()
 }
