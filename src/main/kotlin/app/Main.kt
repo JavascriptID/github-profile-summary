@@ -12,7 +12,6 @@ import org.eclipse.jetty.server.Server
 import org.eclipse.jetty.server.ServerConnector
 import org.eclipse.jetty.util.thread.QueuedThreadPool
 import org.slf4j.LoggerFactory
-import java.util.*
 
 fun main(args: Array<String>) {
 
@@ -39,7 +38,7 @@ fun main(args: Array<String>) {
 
         get("/api/user/:user") { ctx ->
             val user = ctx.param("user")!!
-            when (UserCtrl.hasStarredRepo(user) || unrestricted) {
+            when (unrestricted || UserCtrl.hasStarredRepo(user)) {
                 true -> ctx.json(UserCtrl.getUserProfile(ctx.param("user")!!))
                 false -> ctx.status(400)
             }
@@ -47,7 +46,7 @@ fun main(args: Array<String>) {
 
         get("/user/:user") { ctx ->
             val user = ctx.param("user")!!
-            when (UserCtrl.hasStarredRepo(user) || unrestricted) {
+            when (unrestricted || UserCtrl.hasStarredRepo(user)) {
                 true -> ctx.renderVelocity("user.vm", model("user", user, "gtmId", gtmId))
                 false -> ctx.redirect("/search?q=$user")
             }
@@ -55,16 +54,16 @@ fun main(args: Array<String>) {
 
         get("/search") { ctx ->
             val user = ctx.queryParam("q")?.trim() ?: ""
-            when (UserCtrl.hasStarredRepo(user) || (unrestricted && user != "")) {
+            when ((unrestricted && user != "") || UserCtrl.hasStarredRepo(user)) {
                 true -> ctx.redirect("/user/$user")
                 false -> ctx.renderVelocity("search.vm", model("q", escapeHtml(user), "gtmId", gtmId))
             }
         }
 
         ws("/rate-limit-status") { ws ->
-            ws.onConnect { session ->
-                Timer().scheduleAtFixedRate(GhService.broadcastRemainingRequests(session), 0, 1000)
-            }
+            ws.onConnect { session -> GhService.registerClient(session) }
+            ws.onClose { session, _, _ -> GhService.unregisterClient(session) }
+            ws.onError { session, _ -> GhService.unregisterClient(session) }
         }
 
     }
