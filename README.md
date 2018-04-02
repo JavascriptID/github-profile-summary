@@ -25,6 +25,11 @@ You can build a profile summary for any GitHub profile using `-Dunrestricted=tru
 
 * `java -Dunrestricted=true -jar target/profile-summary-for-github-jar-with-dependencies.jar`
 
+You can set when the app should require user-starring by passing `free-requests-cutoff`
+Passing 1000 will require the app to require starring if there are less than 1000 requests left:
+
+* `java -Dfree-requests-cutoff=1000 -jar target/profile-summary-for-github-jar-with-dependencies.jar`
+
 You can enable Google Tag Manager on your instance by setting `gtm-id`:
 
 * `java -Dgtm-id=GTM-XXXXXX -jar target/profile-summary-for-github-jar-with-dependencies.jar`

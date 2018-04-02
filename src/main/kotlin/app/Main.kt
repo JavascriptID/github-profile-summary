@@ -17,8 +17,17 @@ fun main(args: Array<String>) {
 
     val log = LoggerFactory.getLogger("app.MainKt")
 
-    val unrestricted = Config.getUnrestrictedState()?.toBoolean() == true
     val gtmId = Config.getGtmId()
+
+    fun canLoadUser(user: String): Boolean {
+        val unrestricted = Config.getUnrestrictedState()?.toBoolean() == true
+        val remainingRequests by lazy { GhService.remainingRequests }
+        val hasFreeRemainingRequests by lazy { remainingRequests > (Config.freeRequestCutoff() ?: remainingRequests) }
+        return unrestricted
+                || Cache.contains(user)
+                || hasFreeRemainingRequests
+                || UserCtrl.hasStarredRepo(user)
+    }
 
     val app = Javalin.create().apply {
         enableStandardRequestLogging()
@@ -38,7 +47,7 @@ fun main(args: Array<String>) {
 
         get("/api/user/:user") { ctx ->
             val user = ctx.param("user")!!
-            when (unrestricted || UserCtrl.hasStarredRepo(user)) {
+            when (canLoadUser(user)) {
                 true -> ctx.json(UserCtrl.getUserProfile(ctx.param("user")!!))
                 false -> ctx.status(400)
             }
@@ -46,7 +55,7 @@ fun main(args: Array<String>) {
 
         get("/user/:user") { ctx ->
             val user = ctx.param("user")!!
-            when (unrestricted || UserCtrl.hasStarredRepo(user)) {
+            when (canLoadUser(user)) {
                 true -> ctx.renderVelocity("user.vm", model("user", user, "gtmId", gtmId))
                 false -> ctx.redirect("/search?q=$user")
             }
@@ -54,7 +63,7 @@ fun main(args: Array<String>) {
 
         get("/search") { ctx ->
             val user = ctx.queryParam("q")?.trim() ?: ""
-            when ((unrestricted && user != "") || UserCtrl.hasStarredRepo(user)) {
+            when (user != "" && canLoadUser(user)) {
                 true -> ctx.redirect("/user/$user")
                 false -> ctx.renderVelocity("search.vm", model("q", escapeHtml(user), "gtmId", gtmId))
             }
